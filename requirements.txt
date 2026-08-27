@@ -1,0 +1,7 @@
+feedparser>=6.0
+requests>=2.31
+yfinance>=0.2.40
+pandas>=2.0
+numpy>=1.24
+apscheduler>=3.10
+rich>=13.0
