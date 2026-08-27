@@ -285,3 +285,126 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   *{animation:none !important; transition:none !important; scroll-behavior:auto !important}
 }
 """
+
+
+# Layered on top of CSS: the beginner-facing surfaces and the plain/expert switch.
+CSS_PLAIN = r"""
+/* ---------------------- mode switch ---------------------- */
+.modebar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:11px 0; border-bottom:1px solid var(--line);
+}
+.modebar .slug{margin-right:2px}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:100px; overflow:hidden}
+.seg button{
+  padding:6px 15px; font-family:var(--font-mono); font-size:11px; letter-spacing:.05em;
+  color:var(--muted); background:var(--surface); transition:all .12s ease;
+}
+.seg button[aria-pressed="true"]{background:var(--accent); color:#fff}
+:root[data-theme="dark"] .seg button[aria-pressed="true"]{color:#151109}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .seg button[aria-pressed="true"]{color:#151109}
+}
+.modehint{font-size:12.5px; color:var(--muted)}
+
+/* Plain is the default with no JS involved, so the page never flashes both
+   versions before the script runs. */
+body:not(.mode-expert) .expert-only{display:none !important}
+body.mode-expert .plain-only{display:none !important}
+
+/* ---------------------- primer ---------------------- */
+.primer{border-bottom:1px solid var(--line); background:var(--raised)}
+.primer-in{padding:26px 0 30px}
+.primer h3{font-family:var(--font-display); font-size:22px; margin:8px 0 6px}
+.primer .lede{font-size:15px; color:var(--ink-2); max-width:70ch; line-height:1.65; margin-bottom:20px}
+.cards3{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px}
+.pcard{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:15px 17px}
+.pcard h4{font-family:var(--font-display); font-size:16.5px; margin-bottom:6px}
+.pcard p{font-size:13.4px; line-height:1.6; color:var(--ink-2)}
+.ladder-risk{display:flex; flex-direction:column; gap:7px; margin-top:18px}
+.lr{display:grid; grid-template-columns:76px 108px 1fr; gap:12px; align-items:baseline;
+  padding:7px 0; border-bottom:1px solid var(--line-soft); font-size:13.2px}
+.lr:last-child{border-bottom:none}
+.lr-name{font-family:var(--font-mono); font-size:11px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted)}
+.lr-why{color:var(--ink-2); line-height:1.5}
+
+/* ---------------------- risk dots ---------------------- */
+.dots{display:inline-flex; gap:3px; align-items:center}
+.dot{width:6px; height:6px; border-radius:50%; background:var(--line)}
+.dot.on-1{background:var(--up)} .dot.on-2{background:var(--up)}
+.dot.on-3{background:var(--accent)} .dot.on-4{background:var(--down)}
+.dot.on-5{background:var(--down)}
+
+/* ---------------------- browse ---------------------- */
+.group{margin-bottom:26px}
+.group-h{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:4px}
+.group-h h4{font-family:var(--font-display); font-size:18px}
+.group-h .n{font-family:var(--font-mono); font-size:11px; color:var(--muted)}
+.group-blurb{font-size:13.4px; color:var(--muted); line-height:1.55; margin-bottom:11px; max-width:72ch}
+.assets{border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;
+  background:var(--surface)}
+.asset{border-bottom:1px solid var(--line-soft)}
+.asset:last-child{border-bottom:none}
+.asset[hidden]{display:none}
+.asset-row{
+  display:grid; grid-template-columns:66px 1fr 84px 78px 62px; gap:12px; align-items:center;
+  padding:11px 15px; cursor:pointer; text-align:left; width:100%;
+}
+.asset-row:hover{background:var(--raised)}
+.asset-sym{font-family:var(--font-mono); font-size:12.5px; font-weight:600}
+.asset-name{font-size:13.6px; line-height:1.35}
+.asset-name small{display:block; color:var(--muted); font-size:11.5px; margin-top:1px}
+.asset-px{font-family:var(--font-mono); font-size:12.5px; text-align:right;
+  font-variant-numeric:tabular-nums}
+.asset-chg{font-family:var(--font-mono); font-size:12.5px; font-weight:600; text-align:right;
+  font-variant-numeric:tabular-nums}
+.asset-risk{display:flex; justify-content:flex-end}
+.asset-body{display:none; padding:2px 15px 17px; border-top:1px dashed var(--line)}
+.asset.open .asset-body{display:block}
+.asset-body p{font-size:13.8px; line-height:1.65; color:var(--ink-2); margin:10px 0 0; max-width:70ch}
+.tag{
+  display:inline-block; font-family:var(--font-mono); font-size:10px; letter-spacing:.09em;
+  text-transform:uppercase; padding:3px 9px; border-radius:100px; margin:12px 0 2px;
+  background:var(--accent-soft); color:var(--accent-ink); border:1px solid var(--accent);
+}
+.watch{margin-top:12px; padding:11px 13px; border-left:3px solid var(--down);
+  background:var(--down-soft); border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  font-size:13.2px; line-height:1.6; color:var(--ink-2)}
+.watch b{color:var(--ink)}
+.facts{display:flex; gap:20px; flex-wrap:wrap; margin-top:12px}
+.fact{font-size:12px; color:var(--muted)}
+.fact b{display:block; font-family:var(--font-mono); font-size:14px; color:var(--ink);
+  font-variant-numeric:tabular-nums; margin-top:2px}
+
+/* ---------------------- glossary ---------------------- */
+.term{
+  border-bottom:1px dotted var(--accent); cursor:help; color:inherit;
+  text-decoration:none; padding:0;
+}
+.term:hover{background:var(--accent-soft)}
+dialog.gloss{
+  border:1px solid var(--line); border-radius:var(--radius); background:var(--surface);
+  color:var(--ink); max-width:400px; padding:20px 22px; box-shadow:var(--shadow);
+}
+dialog.gloss::backdrop{background:rgba(0,0,0,.5)}
+dialog.gloss h5{font-family:var(--font-display); font-size:19px; margin-bottom:9px}
+dialog.gloss p{font-size:14.2px; line-height:1.62; color:var(--ink-2)}
+dialog.gloss button{margin-top:16px; font-family:var(--font-mono); font-size:11px;
+  letter-spacing:.06em; color:var(--accent); text-decoration:underline}
+
+/* ---------------------- plain news ---------------------- */
+.plainbox{margin-top:11px; padding:12px 14px; background:var(--raised);
+  border-radius:var(--radius-sm)}
+.plainbox p{font-size:14px; line-height:1.62; color:var(--ink-2); margin-bottom:7px; max-width:68ch}
+.plainbox p:last-child{margin-bottom:0}
+.meaning{margin-top:11px; font-size:13.4px; line-height:1.6; color:var(--muted)}
+
+@media (max-width:620px){
+  .asset-row{grid-template-columns:56px 1fr 70px; gap:9px; row-gap:3px}
+  .asset-chg{grid-column:3; text-align:right}
+  .asset-px{display:none}
+  .asset-risk{grid-column:2 / 4; justify-content:flex-start; margin-top:2px}
+  .lr{grid-template-columns:1fr; gap:2px}
+}
+"""

@@ -157,3 +157,112 @@ JS = r"""
   apply();
 })();
 """
+
+
+# Beginner-mode behaviour: reading-level switch, the asset browser, and the
+# tappable glossary. Kept separate from the wire logic above.
+JS_PLAIN = r"""
+(function () {
+  var body = document.body;
+
+  /* ---------- reading level ---------- */
+  var plainBtn = document.getElementById('m-plain');
+  var expertBtn = document.getElementById('m-expert');
+  var hint = document.getElementById('modehint');
+  var HINTS = {
+    plain: 'Jargon is explained. Dotted words can be tapped.',
+    expert: 'Full analyst wording, with the mechanism spelled out.'
+  };
+  function setMode(mode) {
+    body.classList.toggle('mode-plain', mode === 'plain');
+    body.classList.toggle('mode-expert', mode === 'expert');
+    if (plainBtn) plainBtn.setAttribute('aria-pressed', String(mode === 'plain'));
+    if (expertBtn) expertBtn.setAttribute('aria-pressed', String(mode === 'expert'));
+    if (hint) hint.textContent = HINTS[mode];
+    try { localStorage.setItem('finbot-mode', mode); } catch (err) {}
+  }
+  var savedMode = 'plain';
+  try { savedMode = localStorage.getItem('finbot-mode') || 'plain'; } catch (err) {}
+  setMode(savedMode);
+  if (plainBtn) plainBtn.addEventListener('click', function () { setMode('plain'); });
+  if (expertBtn) expertBtn.addEventListener('click', function () { setMode('expert'); });
+
+  /* ---------- asset browser ---------- */
+  var assets = Array.prototype.slice.call(document.querySelectorAll('.asset'));
+  assets.forEach(function (a) {
+    var row = a.querySelector('.asset-row');
+    if (!row) return;
+    row.addEventListener('click', function () {
+      var open = !a.classList.contains('open');
+      a.classList.toggle('open', open);
+      row.setAttribute('aria-expanded', String(open));
+    });
+  });
+
+  var bq = document.getElementById('bq');
+  var riskState = 'all';
+  function applyBrowse() {
+    var q = bq ? bq.value.trim().toLowerCase() : '';
+    document.querySelectorAll('.group').forEach(function (g) {
+      var shown = 0;
+      g.querySelectorAll('.asset').forEach(function (a) {
+        var text = a.textContent.toLowerCase();
+        var risk = (a.querySelector('.dots') || {}).getAttribute
+          ? parseInt(a.querySelector('.dots').getAttribute('aria-label').replace(/\D+/, ''), 10)
+          : 3;
+        var ok = (!q || text.indexOf(q) !== -1) &&
+                 (riskState === 'all' || risk <= 2);
+        a.hidden = !ok;
+        if (ok) shown++;
+      });
+      g.hidden = shown === 0;
+      var n = g.querySelector('.n');
+      if (n) n.textContent = shown;
+    });
+  }
+  if (bq) bq.addEventListener('input', applyBrowse);
+  document.querySelectorAll('.chip[data-risk]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      riskState = b.dataset.risk;
+      document.querySelectorAll('.chip[data-risk]').forEach(function (o) {
+        o.setAttribute('aria-pressed', String(o === b));
+      });
+      applyBrowse();
+    });
+  });
+
+  /* ---------- glossary ---------- */
+  var terms = {};
+  document.querySelectorAll('script[id^="g-"]').forEach(function (el) {
+    var raw = el.textContent.split('|');
+    if (raw.length >= 2) terms[raw[0].toLowerCase()] = raw.slice(1).join('|');
+  });
+  var dlg = document.getElementById('gloss');
+  var dlgT = document.getElementById('gloss-t');
+  var dlgD = document.getElementById('gloss-d');
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest('.term');
+    if (!t || !dlg) return;
+    ev.preventDefault();
+    var key = t.dataset.term;
+    var def = terms[key];
+    if (!def) {
+      // the linked word may be a variant, e.g. "bull / bullish"
+      Object.keys(terms).forEach(function (k) {
+        if (!def && k.indexOf(key) !== -1) def = terms[k];
+      });
+    }
+    if (!def) return;
+    dlgT.textContent = t.textContent;
+    dlgD.textContent = def;
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+  });
+  var close = document.getElementById('gloss-x');
+  if (close && dlg) close.addEventListener('click', function () { dlg.close(); });
+  if (dlg) dlg.addEventListener('click', function (ev) {
+    if (ev.target === dlg) dlg.close();
+  });
+
+  applyBrowse();
+})();
+"""

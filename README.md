@@ -7,6 +7,30 @@ disclosures and institutional filings, then does the part that actually takes wo
 Output is a dashboard you read on your phone, plus a push notification when something
 genuinely new happens.
 
+## Written for someone who is new to this
+
+The dashboard opens in **plain-English mode**. Jargon is replaced with ordinary words,
+every technical term is tappable for a one-sentence definition, and each of the 80 tracked
+assets carries a beginner read: what it actually is, how risky it is on a 1-5 scale, what
+the price is doing in plain words, and the mistake people most often make with that *kind*
+of holding.
+
+> **NVDA · Nvidia** — *Expensive to chase* · Risk 4/5
+> **What it is.** A single company: the chips that nearly all AI systems run on.
+> It has risen 19% in the past month alone. That is a fast move, and fast moves often pause.
+> **Watch out:** owning one company means one bad quarter or one failed product can hit you
+> hard — a risk owning a broad fund spreads away. It has also run up sharply, and buying
+> right after a steep rise is the single most common beginner mistake.
+
+A **Full detail** switch restores the analyst wording for when you want it.
+
+**On "should I buy this?"** — nothing here can answer that, and anything that claims to is
+selling you something. It depends on your income, your timeline, and how you would feel in
+a bad year. What FinBot does instead is the honest, useful version: it tells you what kind
+of thing you are looking at, how much it could realistically hurt you, whether the price is
+stretched or beaten down right now, and the specific error beginners make with that
+category. The judgement stays yours, but it is an informed one.
+
 ## What it does that a price feed doesn't
 
 **Every headline gets an impact read.** For each story FinBot resolves which companies
@@ -41,11 +65,12 @@ tells you it is a lagging indicator with a high false-signal rate in choppy mark
 | news | RSS feeds (CNBC, Yahoo, MarketWatch, TechCrunch, CoinDesk...) | Headlines + summaries |
 | congress | House Clerk financial disclosures | Periodic Transaction Reports + filing PDFs |
 | 13f | SEC EDGAR | Quarterly 13F filings for Berkshire, ARK, Bridgewater, Tiger Global |
-| markets | yfinance | Stocks, indexes, ETFs, bond yields |
+| markets | yfinance | 41 stocks, 5 indexes, 23 ETFs, 11 bond funds and yields |
 | crypto | CoinGecko free API | Price, market cap, 1h/24h/7d/30d changes |
 | patterns | computed | Golden/death cross, RSI extremes, 52-wk breaks, volume spikes |
 | insights | computed | Per-headline stock impact, direction, magnitude, ripple effects |
 | commentary | computed | Narrated movers, patterns, breadth, crypto, congress |
+| plainspeak | computed | Jargon glossary, plain-English event meanings, beginner risk reads |
 
 ## Setup
 
@@ -68,6 +93,12 @@ Everything is stored in `finbot.db` (SQLite).
 `python main.py dashboard --open` builds `site/index.html` — a self-contained page with
 no build step and no runtime dependencies.
 
+- **Start here** — a short primer on what a share, a fund and a bond actually are, plus the
+  1-5 risk scale used everywhere on the page
+- **What you could invest in** — all 80 tracked assets grouped from safest to most
+  speculative (whole-market funds → international → dividend → bonds → sectors → gold →
+  individual companies → high risk). Search it, filter to lower-risk only, tap any row for
+  the full plain-English read
 - **The tape** — click any ticker to filter the whole wire to stories touching it
 - **The read** — the market-wide paragraph, plus gauges that explain what VIX and the
   10-year yield actually mean for equities
@@ -78,6 +109,7 @@ no build step and no runtime dependencies.
   to its narration
 
 Light and dark themes, responsive to phone width, keyboard accessible (`/` focuses search).
+The reading level and theme are both remembered between visits.
 
 ## Free cloud + hourly phone notifications
 
@@ -114,6 +146,9 @@ So the split is deliberate: the notification is the *signal* — ranked, scannab
 4KB. The dashboard one tap away is the *substance*. That is the best available answer to
 "can it look good on the ntfy app", and it is why Pages setup is step 2 above.
 
+The digest is written in plain English by default. Set `NOTIFY_STYLE=expert` if you would
+rather have the analyst phrasing.
+
 Nothing new in an hour means no ping. Items already pushed are never re-sent, so a mover
 that persists across runs notifies once, not every hour.
 
@@ -124,6 +159,8 @@ you want tighter intervals or no cron drift.
 ## Extending it
 
 - Tickers, coins, funds and politicians: `config.py`
+- Plain-English descriptions and risk levels for a new asset: `analysis/assets.py`
+- New glossary term or event explanation: `analysis/plainspeak.py`
 - Teach it a new event type: add a phrase to `EVENT_LEXICON` with its direction, strength,
   and a one-line mechanism. It takes effect immediately.
 - Teach it a new relationship: add an edge to `PEER_GRAPH` as

@@ -51,10 +51,41 @@ TRACKED_FUNDS = {
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 
 # ---------- Markets ----------
-STOCKS = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO"]
+# A wider universe so there is something here for every risk appetite: broad
+# index funds, sector funds, individual companies, and the bond market.
+STOCKS = [
+    # megacap technology
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO",
+    # other technology
+    "AMD", "INTC", "TSM", "MU", "ORCL", "CRM", "ADBE", "QCOM", "TXN",
+    "NFLX", "UBER", "PLTR", "COIN",
+    # financials
+    "JPM", "BAC", "GS", "V", "MA",
+    # healthcare
+    "LLY", "UNH", "JNJ", "PFE",
+    # consumer and industrial
+    "WMT", "COST", "HD", "MCD", "NKE", "SBUX", "KO", "PG", "DIS",
+    # energy
+    "XOM", "CVX",
+]
 INDEXES = ["^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX"]
-ETFS_FUNDS = ["SPY", "QQQ", "VTI", "ARKK", "XLK", "XLF"]
-BONDS = ["^TNX", "^TYX", "^IRX", "TLT", "HYG"]  # yields + bond ETFs
+ETFS_FUNDS = [
+    # broad market - the "own everything" funds
+    "SPY", "VOO", "VTI", "QQQ", "IWM", "DIA", "VT",
+    # international
+    "VEA", "VWO",
+    # dividend and lower-volatility tilts
+    "SCHD", "VIG", "VYM",
+    # sectors
+    "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLU",
+    # high risk / commodities
+    "ARKK", "GLD", "SLV",
+]
+BONDS = [
+    "^TNX", "^TYX", "^IRX",              # US Treasury yields (10y, 30y, 3m)
+    "SHY", "IEF", "TLT",                 # short, medium, long government bonds
+    "BND", "AGG", "LQD", "TIP", "HYG",   # total market, corporate, inflation, high yield
+]
 
 # ---------- Crypto (CoinGecko free API) ----------
 CRYPTO_IDS = ["bitcoin", "ethereum", "solana", "ripple", "cardano", "dogecoin"]

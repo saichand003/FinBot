@@ -30,12 +30,15 @@ import requests
 
 import config
 import db
+from analysis.plainspeak import plain_breadth, plain_event, plain_pattern
 
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "")
+# Plain wording by default. Set NOTIFY_STYLE=expert for the analyst phrasing.
+PLAIN_STYLE = os.environ.get("NOTIFY_STYLE", "plain").lower() != "expert"
 
 MAX_BODY = 3800   # ntfy caps the message body; stay comfortably under it
 
@@ -172,7 +175,22 @@ def build_digest(since_minutes=70, mark=True):
             "SELECT headline, body FROM commentary WHERE kind='breadth' "
             "ORDER BY id DESC LIMIT 1").fetchone()
         if lead:
-            blocks.append(f"**{lead['headline']}**\n{_first_sentences(lead['body'], 3)}")
+            if PLAIN_STYLE:
+                eq = c.execute(
+                    "SELECT change_pct FROM market_snapshots WHERE asset_class IN "
+                    "('stock','etf_fund') AND change_pct IS NOT NULL "
+                    "GROUP BY symbol").fetchall()
+                vix = c.execute(
+                    "SELECT price FROM market_snapshots WHERE symbol='^VIX' "
+                    "ORDER BY id DESC LIMIT 1").fetchone()
+                if eq:
+                    chgs = [r["change_pct"] for r in eq]
+                    up = sum(1 for v in chgs if v > 0)
+                    blocks.append("**TODAY'S MARKET**\n" + plain_breadth(
+                        up, len(chgs), sum(chgs) / len(chgs),
+                        vix["price"] if vix else None))
+            else:
+                blocks.append(f"**{lead['headline']}**\n{_first_sentences(lead['body'], 3)}")
             tags.add("chart_with_upwards_trend")
 
         # --- the stories that actually move something ---
@@ -194,14 +212,16 @@ def build_digest(since_minutes=70, mark=True):
             for s in stories:
                 mark = DIR_EMOJI.get(s["direction"], "🟡")
                 lines.append(f"{mark} **{s['title'][:110]}**")
-                if s["tickers"]:
-                    # A resolved story gets the stance - that is the useful line.
+                label = (s["event_labels"] or "").split(",")[0]
+                if PLAIN_STYLE:
+                    # Say what the event means, not what a trader should do.
+                    meaning = plain_event(label) if label else ""
+                    who = f"`{s['tickers']}` — " if s["tickers"] else ""
+                    lines.append(f"   {who}_{meaning or 'No plain summary available.'}_")
+                elif s["tickers"]:
                     lines.append(f"   `{s['tickers']}` — _{_first_sentences(s['suggestion'], 1)}_")
                 else:
-                    # No ticker resolved: name the event instead of repeating
-                    # the same "could not resolve" sentence on every story.
-                    ev = (s["event_labels"] or "").split(",")[0] or "unclassified"
-                    lines.append(f"   _{ev.lower()} — no tracked ticker named_")
+                    lines.append(f"   _{(label or 'unclassified').lower()} — no tracked ticker named_")
                 if s["direction"] > 0:
                     tags.add("green_circle")
                 elif s["direction"] < 0:
@@ -221,9 +241,13 @@ def build_digest(since_minutes=70, mark=True):
         pending += keys
         if pats:
             newsworthy = True
-            blocks.append("**📈 PATTERNS**\n" + "\n".join(
-                f"• `{p['symbol']}` {p['pattern'].replace('_', ' ')} — {p['detail']}"
-                for p in pats))
+            if PLAIN_STYLE:
+                blocks.append("**📈 SIGNALS WORTH KNOWING**\n" + "\n".join(
+                    f"• **{p['symbol']}** {plain_pattern(p['pattern'])}" for p in pats))
+            else:
+                blocks.append("**📈 PATTERNS**\n" + "\n".join(
+                    f"• `{p['symbol']}` {p['pattern'].replace('_', ' ')} — {p['detail']}"
+                    for p in pats))
             tags.add("bar_chart")
             if any(p["pattern"] in ("golden_cross", "death_cross") for p in pats):
                 urgent = True
@@ -243,7 +267,7 @@ def build_digest(since_minutes=70, mark=True):
         pending += keys
         if movers:
             newsworthy = True
-            lines = ["**⚡ MOVERS**"]
+            lines = ["**⚡ BIG MOVES TODAY**" if PLAIN_STYLE else "**⚡ MOVERS**"]
             for m in movers:
                 lines.append(f"**{m['headline']}**")
                 lines.append(f"   {_first_sentences(m['body'], 2)}")

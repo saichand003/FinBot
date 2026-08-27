@@ -2,8 +2,8 @@
 import pathlib
 
 from dashboard import data, render
-from dashboard.script import JS
-from dashboard.style import CSS, FONTS
+from dashboard.script import JS, JS_PLAIN
+from dashboard.style import CSS, CSS_PLAIN, FONTS
 
 TITLE = "FinBot Wire"
 DESCRIPTION = ("Every headline read for what it moves, with the numbers explained "
@@ -32,10 +32,15 @@ def render_body(d):
 </div></header>
 
 {render.render_tape(d['markets'])}
+{render.render_modebar()}
 {render.render_leader(d)}
+{render.render_primer()}
 
 <div class="wrap"><div class="main">
-  <main>{render.render_wire(d['insights'])}</main>
+  <main>
+    {render.render_browse(d['browse'])}
+    {render.render_wire(d['insights'])}
+  </main>
   <div class="rail">
     {render.render_notes("Movers", "what the number actually means",
                          d['movers'], d['stats'], 8)}
@@ -60,7 +65,9 @@ def render_body(d):
   be confidently wrong. Verify against the source story before acting on anything.</p>
 </div></footer>
 
-<script>{JS}</script>"""
+{render.render_glossary_dialog()}
+<script>{JS}</script>
+<script>{JS_PLAIN}</script>"""
 
 
 def build_dashboard(path="index.html", title=TITLE):
@@ -77,9 +84,9 @@ def build_dashboard(path="index.html", title=TITLE):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="{FONTS}">
-<style>{CSS}</style>
+<style>{CSS}{CSS_PLAIN}</style>
 </head>
-<body>
+<body class="mode-plain">
 {body}
 </body>
 </html>"""
@@ -98,7 +105,7 @@ def build_fragment(path):
             f'<link rel="preconnect" href="https://fonts.googleapis.com">\n'
             f'<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
             f'<link rel="stylesheet" href="{FONTS}">\n'
-            f'<style>{CSS}</style>\n{render_body(d)}')
+            f'<style>{CSS}{CSS_PLAIN}</style>\n{render_body(d)}')
     out = pathlib.Path(path).resolve()
     out.write_text(frag, encoding="utf-8")
     print(f"[dashboard] wrote fragment {out} ({len(frag)//1024} KB)")

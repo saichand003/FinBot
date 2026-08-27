@@ -33,6 +33,43 @@ def md(text):
     return "".join(f"<p>{line}</p>" for line in out.split("\n") if line.strip())
 
 
+_TAG_SPLIT = re.compile(r"(<[^>]+>)")
+
+
+def _glossary_pattern():
+    from analysis.plainspeak import GLOSSARY
+    # Longest first so "200-day average" wins over "moving average".
+    terms = sorted(GLOSSARY, key=len, reverse=True)
+    alt = "|".join(re.escape(t) for t in terms)
+    return re.compile(r"(?<![\w-])(" + alt + r")(?![\w-])", re.I)
+
+
+_GLOSS_RE = None
+
+
+def link_terms(html_text, limit=3):
+    """Make jargon tappable. Only the first few hits per block, so the prose
+    does not turn into a field of dotted underlines."""
+    global _GLOSS_RE
+    if _GLOSS_RE is None:
+        _GLOSS_RE = _glossary_pattern()
+    used = {"n": 0}
+
+    def repl(m):
+        if used["n"] >= limit:
+            return m.group(0)
+        used["n"] += 1
+        word = m.group(1)
+        return (f'<button class="term" data-term="{html.escape(word.lower())}" '
+                f'type="button">{word}</button>')
+
+    parts = _TAG_SPLIT.split(html_text)
+    for i, chunk in enumerate(parts):
+        if not chunk.startswith("<"):
+            parts[i] = _GLOSS_RE.sub(repl, chunk)
+    return "".join(parts)
+
+
 def pct(v, digits=2):
     return "—" if v is None else f"{v:+.{digits}f}%"
 
@@ -159,7 +196,21 @@ def render_item(ins, idx):
             f'rel="noopener noreferrer">Read the source story &rarr;</a>'
             if ins.get("url") else "")
 
-    search_blob = e(f"{ins['title']} {ins['tickers']} {ins['event_labels']} {ins['narrative']}").lower()
+    plain_block = "".join(f"<p>{e(x)}</p>" for x in ins.get("plain", [])) or \
+        "<p>No plain-English read available for this one.</p>"
+
+    # In plain mode the ladder gets a caption that says what a bar actually is.
+    ladder_plain = ""
+    if rungs:
+        ladder_plain = (
+            '<div class="ladder"><div class="ladder-h">Who this touches &middot; '
+            'longer bar = bigger likely effect</div>' + "".join(rungs) +
+            '<div class="meaning">Green means FinBot expects this to help that company, '
+            'red that it hurts. These are estimates from past patterns, not predictions.</div>'
+            '</div>')
+
+    search_blob = e(f"{ins['title']} {ins['tickers']} {ins['event_labels']} {ins['narrative']} "
+                    f"{' '.join(ins.get('plain', []))}").lower()
 
     return f"""
 <article class="item" data-idx="{idx}" data-dir="{d}" data-conf="{e(ins['confidence'])}"
@@ -174,9 +225,16 @@ def render_item(ins, idx):
   <h4 class="item-title" role="button" tabindex="0">{e(ins['title'])}</h4>
   <div class="tkrs">{chips}</div>
   <div class="detail">
-    {md(ins['narrative'])}
-    {ladder}
-    <div class="stance"><strong>Stance</strong>{e(ins['suggestion'])}</div>
+    <div class="plain-only">
+      <div class="plainbox">{plain_block}</div>
+      {ladder_plain}
+      <div class="stance"><strong>What it means for you</strong>{e(ins['suggestion'])}</div>
+    </div>
+    <div class="expert-only">
+      {link_terms(md(ins['narrative']))}
+      {ladder}
+      <div class="stance"><strong>Stance</strong>{e(ins['suggestion'])}</div>
+    </div>
     {link}
   </div>
 </article>"""
@@ -291,3 +349,134 @@ def render_filings(rows):
   <div class="slug" style="margin-bottom:10px">Institutional portfolios &middot; SEC EDGAR</div>
   <div class="card">{''.join(out)}</div>
 </section>"""
+
+
+# =====================================================================
+#  Beginner-facing surfaces
+# =====================================================================
+from analysis.plainspeak import GLOSSARY   # noqa: E402
+
+RISK_SCALE = [
+    (1, "Very low", "Government bonds and cash-like funds. Barely move."),
+    (2, "Low", "Whole-market funds. Hundreds of companies, so no single failure hurts much."),
+    (3, "Medium", "Single-industry funds and steady large companies."),
+    (4, "High", "Individual growth companies. Double-digit days are normal."),
+    (5, "Very high", "Speculative. Losing most of it is a realistic outcome."),
+]
+
+
+def risk_dots(risk):
+    return ('<span class="dots" aria-label="Risk {r} of 5">'.format(r=risk) +
+            "".join(f'<span class="dot {"on-%d" % risk if i < risk else ""}"></span>'
+                    for i in range(5)) + "</span>")
+
+
+def render_modebar():
+    return """
+<div class="wrap"><div class="modebar">
+  <span class="slug">Reading level</span>
+  <div class="seg" role="group" aria-label="Reading level">
+    <button id="m-plain" aria-pressed="true">PLAIN ENGLISH</button>
+    <button id="m-expert" aria-pressed="false">FULL DETAIL</button>
+  </div>
+  <span class="modehint" id="modehint">Jargon is explained. Dotted words can be tapped.</span>
+</div></div>"""
+
+
+def render_primer():
+    ladder = "".join(
+        f'<div class="lr"><span class="lr-name">{risk_dots(r)}</span>'
+        f'<span>{e(label)}</span><span class="lr-why">{e(why)}</span></div>'
+        for r, label, why in RISK_SCALE)
+    return f"""
+<section class="primer"><div class="wrap"><div class="primer-in">
+  <div class="slug">Start here</div>
+  <h3>Three things worth knowing before you read anything else</h3>
+  <p class="lede">This page reads the financial news and tells you which companies it is
+  likely to affect. It cannot tell you what to buy — that depends on your income, your
+  timeline and how you would feel in a bad year. What it can do is explain what you are
+  looking at and how much it could hurt you.</p>
+  <div class="cards3">
+    <div class="pcard"><h4>A share</h4><p>A slice of one company. If that company does well
+    you gain; if it stumbles, you lose. All your risk sits on one business.</p></div>
+    <div class="pcard"><h4>A fund (ETF)</h4><p>One purchase that owns hundreds of companies
+    at once. If one fails, the rest carry you. This is why beginner guidance nearly always
+    starts here.</p></div>
+    <div class="pcard"><h4>A bond</h4><p>A loan to a government or company. They pay you
+    interest and return your money later. Steadier than shares, and it grows more slowly.</p></div>
+  </div>
+  <div class="slug" style="margin-top:24px">How to read the risk dots</div>
+  <div class="ladder-risk">{ladder}</div>
+</div></div></section>"""
+
+
+def render_asset(a):
+    chg = a.get("chg_1d")
+    story = "".join(f"<p>{e(x)}</p>" for x in a["story"])
+    facts = []
+    for key, label in (("ret_1m", "1 month"), ("ret_6m", "6 months")):
+        v = a.get(key)
+        if v is not None:
+            facts.append(f'<div class="fact">{label}<b class="{cls(v)}">{v:+.1f}%</b></div>')
+    facts.append(f'<div class="fact">Risk<b>{a["risk"]}/5 {e(a["risk_label"])}</b></div>')
+
+    return f"""
+<div class="asset">
+  <button class="asset-row" aria-expanded="false">
+    <span class="asset-sym">{e(a['symbol'])}</span>
+    <span class="asset-name">{e(a['name'])}<small>{e(a.get('sub') or a['kind_label'])}</small></span>
+    <span class="asset-px num">{money(a.get('price'))}</span>
+    <span class="asset-chg {cls(chg)}">{pct(chg)}</span>
+    <span class="asset-risk">{risk_dots(a['risk'])}</span>
+  </button>
+  <div class="asset-body">
+    <p><b>What it is.</b> {e(a['plain'])}</p>
+    {story}
+    <div class="tag">{e(a['stance_label'])}</div>
+    <p>{e(a['stance'])}</p>
+    <div class="watch"><b>Watch out:</b> {e(a['warning'])}</div>
+    <div class="facts">{''.join(facts)}</div>
+  </div>
+</div>"""
+
+
+def render_browse(groups):
+    out = []
+    for g in groups:
+        rows = "".join(render_asset(a) for a in g["rows"])
+        out.append(f"""
+<div class="group" data-group="{e(g['kind'])}">
+  <div class="group-h"><h4>{e(g['title'])}</h4><span class="n">{len(g['rows'])}</span></div>
+  <p class="group-blurb">{e(g['blurb'])}</p>
+  <div class="assets">{rows}</div>
+</div>""")
+    total = sum(len(g["rows"]) for g in groups)
+    return f"""
+<section id="browse">
+  <div class="section-head">
+    <h3>What you could invest in</h3>
+    <span class="slug">tap anything for a plain-English read</span>
+    <span class="count">{total} tracked</span>
+  </div>
+  <div class="controls">
+    <label class="search">
+      <span class="slug">Find</span>
+      <input type="search" id="bq" placeholder="Apple, bonds, gold…"
+             aria-label="Search everything FinBot tracks">
+    </label>
+    <button class="chip" data-risk="low" aria-pressed="false">Lower risk only</button>
+    <button class="chip" data-risk="all" aria-pressed="true">Show everything</button>
+  </div>
+  {''.join(out)}
+</section>"""
+
+
+def render_glossary_dialog():
+    items = "".join(
+        f'<script type="application/json" id="g-{n}">{html.escape(term)}|{html.escape(defn)}</script>'
+        for n, (term, defn) in enumerate(sorted(GLOSSARY.items())))
+    return f"""
+<dialog class="gloss" id="gloss">
+  <h5 id="gloss-t"></h5><p id="gloss-d"></p>
+  <button id="gloss-x">Close</button>
+</dialog>{items}"""

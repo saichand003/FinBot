@@ -109,7 +109,8 @@ def _save_stats(profiles):
 
 
 def detect_patterns():
-    symbols = config.STOCKS + config.INDEXES + config.ETFS_FUNDS
+    symbols = (config.STOCKS + config.INDEXES + config.ETFS_FUNDS
+               + config.BONDS)
     found, profiles = [], []
     data = yf.download(symbols, period=f"{config.PATTERN_LOOKBACK_DAYS}d",
                        group_by="ticker", progress=False, auto_adjust=True)
