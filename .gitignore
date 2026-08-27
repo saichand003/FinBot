@@ -1,0 +1,13 @@
+# Local environment
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated at runtime
+finbot.db
+site/
+index.html
+
+# gstack tooling
+.gstack/

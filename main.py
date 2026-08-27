@@ -5,6 +5,7 @@ Usage:
   python main.py run news         # run one module
   python main.py schedule         # keep running on intervals
   python main.py report           # print latest findings
+  python main.py dashboard        # build + open the HTML dashboard
 """
 import sys
 
@@ -15,7 +16,11 @@ from crawlers.sec_13f import crawl_13f_filings
 from crawlers.markets import crawl_markets
 from crawlers.crypto import crawl_crypto
 from analysis.patterns import detect_patterns
+from analysis.insights import generate_insights
+from analysis.commentary import generate_commentary
 
+# Order matters: crawl raw data, detect patterns, then interpret. The insight
+# and commentary passes read what the crawlers just wrote.
 JOBS = {
     "news": crawl_news,
     "congress": crawl_congress_trades,
@@ -23,6 +28,8 @@ JOBS = {
     "markets": crawl_markets,
     "crypto": crawl_crypto,
     "patterns": detect_patterns,
+    "insights": generate_insights,
+    "commentary": generate_commentary,
 }
 
 
@@ -53,27 +60,66 @@ def schedule():
 
 
 def report():
+    """Print the narrated view - the same content the dashboard renders."""
+    import textwrap
+
+    def wrap(text, indent="    "):
+        clean = text.replace("**", "")
+        return "\n".join(textwrap.fill(p, 96, initial_indent=indent,
+                                       subsequent_indent=indent)
+                         for p in clean.split("\n") if p.strip())
+
     with db.conn() as c:
-        print("\n--- Latest patterns ---")
-        for r in c.execute("SELECT * FROM patterns ORDER BY detected_at DESC LIMIT 15"):
-            print(f"{r['symbol']:8} {r['pattern']:16} {r['detail']}")
-        print("\n--- Latest congress trades ---")
-        for r in c.execute("SELECT * FROM congress_trades ORDER BY tx_date DESC LIMIT 10"):
-            print(f"{r['tx_date']} {r['politician'][:24]:24} {r['tx_type']:16} "
-                  f"{r['ticker']:6} {r['amount']}")
-        print("\n--- Latest headlines ---")
-        for r in c.execute("SELECT * FROM news ORDER BY id DESC LIMIT 10"):
-            print(f"[{r['source']}] {r['title'][:90]}")
+        print("\n" + "=" * 100)
+        print("  MARKET COMMENTARY")
+        print("=" * 100)
+        for r in c.execute(
+            "SELECT * FROM commentary ORDER BY "
+            "CASE severity WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END, "
+            "created_at DESC LIMIT 12"
+        ):
+            print(f"\n[{r['severity']}] {r['headline']}")
+            print(wrap(r["body"]))
+
+        print("\n" + "=" * 100)
+        print("  NEWS - WITH STOCK IMPACT")
+        print("=" * 100)
+        for r in c.execute(
+            "SELECT i.*, n.title, n.source, n.url FROM news_insights i "
+            "JOIN news n ON n.id = i.news_id "
+            "WHERE i.confidence != 'LOW' ORDER BY i.score DESC LIMIT 10"
+        ):
+            sign = {1: "BULLISH", -1: "BEARISH", 0: "VOLATILE"}[r["direction"]]
+            print(f"\n[{r['confidence']} / {sign}] {r['title'][:88]}")
+            print(f"    source: {r['source']}  |  tickers: {r['tickers'] or '-'}")
+            print(wrap(r["narrative"]))
+            print(wrap(f"SUGGESTION: {r['suggestion']}"))
+
+        print("\n" + "=" * 100)
+        print("  RECENT CONGRESS DISCLOSURES")
+        print("=" * 100)
+        for r in c.execute("SELECT * FROM congress_trades ORDER BY disclosed DESC LIMIT 8"):
+            print(f"  {r['disclosed']}  {r['politician'][:24]:24} {r['tx_type'][:14]:14} "
+                  f"{(r['ticker'] or '-'):6} {r['amount']}")
+        print()
 
 
 def hourly():
     """One cloud-friendly pass: crawl fast sources, detect, push to phone."""
     db.init()
-    for name in ("news", "crypto", "markets", "congress", "patterns"):
+    # 13f self-throttles to one check a day, so it is cheap to list here.
+    for name in ("news", "crypto", "markets", "congress", "13f", "patterns",
+                 "insights", "commentary"):
         try:
             JOBS[name]()
         except Exception as ex:
             print(f"{name} crashed: {ex}")
+    # Written into site/ because that is the directory GitHub Pages publishes.
+    from dashboard import build_dashboard
+    try:
+        build_dashboard("site/index.html")
+    except Exception as ex:
+        print(f"dashboard failed: {ex}")
     from notify import notify_digest
     notify_digest()
 
@@ -88,5 +134,12 @@ if __name__ == "__main__":
         schedule()
     elif cmd == "report":
         report()
+    elif cmd == "dashboard":
+        from dashboard import build_dashboard
+        path = build_dashboard("site/index.html")
+        print(f"Dashboard written to {path}")
+        if "--open" in sys.argv:
+            import webbrowser
+            webbrowser.open(f"file://{path}")
     else:
         print(__doc__)
