@@ -1,8 +1,13 @@
-name: FinBot hourly
+name: FinBot every 5 minutes
 
 on:
   schedule:
-    - cron: "7 * * * *"   # every hour at :07 (avoid the crowded :00 slot)
+    # 5 minutes is the fastest interval GitHub accepts. It is best-effort:
+    # scheduled runs are queued on shared infrastructure and are routinely
+    # delayed, and sometimes dropped entirely, under load. The notify window
+    # below is deliberately much wider than the interval so a skipped run
+    # never means a missed digest.
+    - cron: "*/5 * * * *"
   workflow_dispatch:        # manual "Run workflow" button
 
 # Pages permissions let the job publish the dashboard; the notification links to it.
@@ -11,7 +16,9 @@ permissions:
   pages: write
   id-token: write
 
-# Never let two runs publish at once, but let a running crawl finish.
+# Never let two runs publish at once, but let a running crawl finish so it can
+# save its database. GitHub cancels the *queued* run when a newer one arrives,
+# which keeps a backlog from building up at this cadence.
 concurrency:
   group: finbot
   cancel-in-progress: false
@@ -19,7 +26,7 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -31,26 +38,59 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      # Persist the SQLite DB between runs so dedup and "what's new" work
+      # Persist the SQLite DB between runs so dedup and "what's new" work.
+      # This is load-bearing at a 5-minute cadence: the `notified` table lives
+      # in here, and without it every run re-sends the same digest.
       - name: Restore database
+        id: restore-db
         uses: actions/cache/restore@v4
         with:
           path: finbot.db
           key: finbot-db-${{ github.run_id }}
           restore-keys: finbot-db-
 
+      - name: Report restored state
+        run: |
+          if [ -f finbot.db ]; then
+            echo "database restored ($(wc -c < finbot.db) bytes)"
+            python -c "import sqlite3;print('notified rows:',sqlite3.connect('finbot.db').execute('select count(*) from notified').fetchone()[0])" || true
+          else
+            echo "::warning::no database restored - dedup starts empty, this run may re-send old items"
+          fi
+
       - name: Install deps
         run: pip install -r requirements.txt
+
+      # Fail loudly if the push channel was never configured: without this the
+      # job goes green while notify.py quietly logs "no channel configured".
+      - name: Check notification secrets
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$NTFY_TOPIC" ] && { [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; }; then
+            echo "::error::No push channel configured. Set the NTFY_TOPIC secret, or both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "ntfy configured: $([ -n "$NTFY_TOPIC" ] && echo yes || echo no)"
+          echo "telegram configured: $([ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && echo yes || echo no)"
 
       - name: Crawl, analyse, build dashboard, notify
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Look back much further than the 5-minute interval. Duplicate pushes
+          # are prevented by the `notified` table, not by a narrow window, so a
+          # wide window only buys resilience against delayed or dropped runs.
+          NOTIFY_WINDOW_MINUTES: "180"
           # The dashboard is published to Pages; the push notification links here.
           DASHBOARD_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: python main.py hourly
 
+      # Save before publishing: if the Pages deploy fails, the crawl work and
+      # the dedup state are still kept for the next run.
       - name: Save database
         if: always()
         uses: actions/cache/save@v4

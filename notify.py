@@ -39,6 +39,14 @@ TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "")
 # Plain wording by default. Set NOTIFY_STYLE=expert for the analyst phrasing.
 PLAIN_STYLE = os.environ.get("NOTIFY_STYLE", "plain").lower() != "expert"
+# How far back a run looks for new material. Duplicate pushes are prevented by
+# the `notified` table, not by this window, so it should be set comfortably
+# wider than the schedule interval: a delayed or dropped run then still picks
+# up whatever it missed instead of the item falling through the gap.
+try:
+    NOTIFY_WINDOW = max(5, int(os.environ.get("NOTIFY_WINDOW_MINUTES", "70")))
+except ValueError:
+    NOTIFY_WINDOW = 70
 
 MAX_BODY = 3800   # ntfy caps the message body; stay comfortably under it
 
@@ -159,12 +167,14 @@ def _first_sentences(text, n=2):
     return out + ("." if out and not out.endswith(".") else "")
 
 
-def build_digest(since_minutes=70, mark=True):
+def build_digest(since_minutes=None, mark=True):
     """The ranked brief: what changed, what it means, in that order.
 
     Only genuinely new items are included. The market read is always attached as
     framing, but on its own it never triggers a push - no news means no ping.
     """
+    if since_minutes is None:
+        since_minutes = NOTIFY_WINDOW
     blocks, tags, pending = [], set(), []
     urgent = False
     newsworthy = False
@@ -210,8 +220,8 @@ def build_digest(since_minutes=70, mark=True):
             newsworthy = True
             lines = ["**📰 STORIES THAT MOVE SOMETHING**"]
             for s in stories:
-                mark = DIR_EMOJI.get(s["direction"], "🟡")
-                lines.append(f"{mark} **{s['title'][:110]}**")
+                dot = DIR_EMOJI.get(s["direction"], "🟡")
+                lines.append(f"{dot} **{s['title'][:110]}**")
                 label = (s["event_labels"] or "").split(",")[0]
                 if PLAIN_STYLE:
                     # Say what the event means, not what a trader should do.
@@ -338,10 +348,11 @@ def _title():
     return "FinBot digest"
 
 
-def notify_digest(since_minutes=70):
+def notify_digest(since_minutes=None):
     body, tags, priority = build_digest(since_minutes)
     if not body:
-        print("[notify] nothing new this hour, skipping push")
+        print("[notify] nothing new in the last "
+              f"{since_minutes or NOTIFY_WINDOW} minutes, skipping push")
         return False
 
     actions = []
