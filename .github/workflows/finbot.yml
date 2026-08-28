@@ -24,12 +24,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Crawl and notify. Deliberately does NOT deploy: publishing lives in its own
+  # job so that re-running a failed deploy never re-uploads the artifact, and so
+  # a broken Pages setup cannot mark a successful crawl as failed.
   crawl:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -103,6 +103,16 @@ jobs:
         with:
           path: site
 
+  # Separate job, one step. Re-running just this job reuses the artifact the
+  # crawl already uploaded instead of adding a second one.
+  deploy:
+    needs: crawl
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - name: Publish to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
